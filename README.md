@@ -2,7 +2,7 @@
 
 [![Build status](https://github.com/JuliaAI/MLJEnsembles.jl/workflows/CI/badge.svg)](https://github.com/JuliaAI/MLJEnsembles.jl/actions) [![codecov.io](http://codecov.io/github/JuliaAI/MLJEnsembles.jl/coverage.svg?branch=master)](http://codecov.io/github/JuliaAI/MLJEnsembles.jl?branch=master) 
 
-A package allowing one to a create a bagged homogeneous ensemble of
+A package to create bagged homogeneous ensembles of
 machine learning models using the
 [MLJ](https://alan-turing-institute.github.io/MLJ.jl/dev/) machine
 learning framework.
