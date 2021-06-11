@@ -20,7 +20,7 @@ No installation is necessary when using MLJ, which is installed like this:
 
 ```julia
 using Pkg
-Pkg.add("MLJ")
+Pkg.add("MLJ")\
 using MLJ
 ```
 
@@ -33,12 +33,11 @@ Pkg.add("MLJEnsembles")
 using MLJBase, MLJEnsembles
 ```
 
-In this case you will also need to load code defining an atomic
-model to ensemble. The easiest way to do this is run
-`Pkg.add(MLJModels)` and use the `@load` macro.  See the [Loading
-Model
+In this case you will also need to load code defining an atomic model
+to ensemble. The easiest way to do this is run `Pkg.add("MLJModels");
+using MLJModels` and use the `@load` macro.  See the [Loading Model
 Code](https://alan-turing-institute.github.io/MLJ.jl/dev/loading_model_code/)
-of the MLJ manual for this and other possibilities. 
+of the MLJ manual for this and other possibilities.
 
 
 ## Sample usage
