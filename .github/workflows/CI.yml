@@ -1,4 +1,6 @@
 name: CI
+env:
+  CODECOV_TOKEN: 'b04186a9-0742-481a-be3e-e7457120db3f'
 
 on:
   push:
