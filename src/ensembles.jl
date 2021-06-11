@@ -1,3 +1,17 @@
+using MLJModelInterface
+import MLJModelInterface: predict, fit
+using Random
+using CategoricalArrays
+using ComputationalResources
+using MLJBase
+using Distributed
+import Distributions
+using ScientificTypes: Continuous
+using ProgressMeter
+import StatsBase
+
+export EnsembleModel
+
 ## ENSEMBLES OF FITRESULTS
 
 # Atom is atomic model type, eg, DecisionTree
