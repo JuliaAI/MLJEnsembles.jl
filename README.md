@@ -9,25 +9,31 @@ machine learning models using the
 [MLJ](https://alan-turing-institute.github.io/MLJ.jl/dev/) machine
 learning framework.
 
+For combining models in more general ways, see the [Composing
+Models](https://alan-turing-institute.github.io/MLJ.jl/dev/composing_models/#Composing-Models)
+section of the MLJ manual.
+
 
 ## Installation
 
-No installation is necessary when using MLJ:
+No installation is necessary when using MLJ, which is installed like this:
 
 ```julia
 using Pkg
+Pkg.add("MLJ")
 using MLJ
 ```
 
-For a minimal installation:
+Alternatively, for a "minimal" installation:
 
 ```julia
 using Pkg
 Pkg.add("MLJBase")
 Pkg.add("MLJEnsembles")
+using MLJBase, MLJEnsembles
 ```
 
-In this case you will also need to load code definining an atomic
+In this case you will also need to load code defining an atomic
 model to ensemble. The easiest way to do this is run
 `Pkg.add(MLJModels)` and use the `@load` macro.  See the [Loading
 Model
@@ -42,5 +48,5 @@ See [Data Science Tutorials](https://alan-turing-institute.github.io/DataScience
 
 ## Documentation
 
-See the [MLJ manual](https://alan-turing-institute.github.io/MLJ.jl/dev/homogeneous_ensembles/#Homegeneous-Ensembles).
+See the [MLJ manual](https://alan-turing-institute.github.io/MLJ.jl/dev/homogeneous_ensembles/#Homogeneous-Ensembles).
 
