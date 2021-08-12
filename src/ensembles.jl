@@ -6,7 +6,7 @@ using ComputationalResources
 using MLJBase
 using Distributed
 import Distributions
-using ScientificTypesBase: Continuous
+using ScientificTypes: Continuous
 using ProgressMeter
 import StatsBase
 
