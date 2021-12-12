@@ -1,18 +1,4 @@
-using MLJModelInterface
-import MLJModelInterface: predict, fit
-using Random
-using CategoricalArrays
-using ComputationalResources
-using MLJBase
-using Distributed
-import Distributions
-using ScientificTypes: Continuous
-using ProgressMeter
-import StatsBase
-
-export EnsembleModel
-
-## ENSEMBLES OF FITRESULTS
+# # ENSEMBLES OF FITRESULTS
 
 # Atom is atomic model type, eg, DecisionTree
 # R will be the tightest type of the atom fit-results.
@@ -95,14 +81,10 @@ function predict(wens::WrappedEnsemble, atomic_weights, Xnew,
     # TODO: make this more memory efficient but note that the type of
     # Xnew is unknown (ie, model dependent):
     # a matrix of probability distributions:
-    preds_gen   = (predict(atom, fitresult, Xnew) for fitresult in ensemble)
-    predictions = hcat(preds_gen...)
-    n_rows      = size(predictions, 1)
+    predictions = [predict(atom, fitresult, Xnew) for fitresult in ensemble]
 
     # the weighted averages over the ensemble of the discrete pdf's:
-    predictions = [average([predictions[i, k] for k in 1:n_atoms], weights=atomic_weights) for i in 1:n_rows]
-
-    return predictions
+    return atomic_weights .* predictions |> sum
 end
 
 function predict(wens::WrappedEnsemble, atomic_weights, Xnew,
@@ -119,22 +101,27 @@ function predict(wens::WrappedEnsemble, atomic_weights, Xnew,
     preds_gen   = (predict(atom, fitresult, Xnew) for fitresult in ensemble)
     predictions = hcat(preds_gen...)
 
+    # TODO: return normal distributions in special case of normal predictions
     # n_rows = size(predictions, 1)
-    # # the weighted average over the ensemble of the pdf means and pdf variances:
-    # μs  = [sum([atomic_weights[k]*mean(predictions[i,k]) for k in 1:n_atoms]) for i in 1:n_rows]
-    # σ2s = [sum([atomic_weights[k]*var(predictions[i,k]) for k in 1:n_atoms]) for i in 1:n_rows]
+    # # the weighted average over the ensemble of the pdf
+    # # means and pdf variances:
+    # μs  = [sum([atomic_weights[k]*mean(predictions[i,k])
+    #    for k in 1:n_atoms]) for i in 1:n_rows]
+    # σ2s = [sum([atomic_weights[k]*var(predictions[i,k])
+    #    for k in 1:n_atoms]) for i in 1:n_rows]
 
     # # a vector of normal probability distributions:
     # prediction = [Distributions.Normal(μs[i], sqrt(σ2s[i])) for i in 1:n_rows]
 
-    prediction = [Distributions.MixtureModel(predictions[i,:], atomic_weights) for i in 1:size(predictions, 1)]
+    prediction = [Distributions.MixtureModel(predictions[i,:], atomic_weights)
+                  for i in 1:size(predictions, 1)]
 
     return prediction
 
 end
 
 
-## CORE ENSEMBLE-BUILDING FUNCTIONS
+# # CORE ENSEMBLE-BUILDING FUNCTIONS
 
 # for when out-of-bag performance estimates are requested:
 function get_ensemble_and_indices(atom::Supervised, verbosity, n, n_patterns,
@@ -192,10 +179,10 @@ _reducer(p::Tuple, q::Tuple) = (vcat(p[1], q[1]), vcat(p[2], q[2]))
 
 
 
-## ENSEMBLE MODEL FOR DETERMINISTIC MODELS
+# # ENSEMBLE MODEL TYPES
 
 mutable struct DeterministicEnsembleModel{Atom<:Deterministic} <: Deterministic
-    atom::Atom
+    model::Atom
     atomic_weights::Vector{Float64}
     bagging_fraction::Float64
     rng::Union{Int,AbstractRNG}
@@ -204,63 +191,8 @@ mutable struct DeterministicEnsembleModel{Atom<:Deterministic} <: Deterministic
     out_of_bag_measure # TODO: type this
 end
 
-function clean!(model::DeterministicEnsembleModel)
-
-    target_scitype(model.atom) <: Union{AbstractVector{<:Finite}, AbstractVector{<:Continuous}} ||
-        error("`atom` has unsupported target_scitype "*
-              "`$(target_scitype(model.atom))`. ")
-
-    message = ""
-
-    if model.bagging_fraction > 1 || model.bagging_fraction <= 0
-        message = message*"`bagging_fraction` should be "*
-        "in the range (0,1]. Reset to 1. "
-        model.bagging_fraction = 1.0
-    end
-
-    if target_scitype(model.atom) <: AbstractVector{<:Finite} && !isempty(model.atomic_weights)
-        message = message*"atomic_weights will be ignored to form predictions. "
-    elseif !isempty(model.atomic_weights)
-        total = sum(model.atomic_weights)
-        if !(total ≈ 1.0)
-            message = message*"atomic_weights should sum to one and are being automatically normalized. "
-            model.atomic_weights = model.atomic_weights/total
-        end
-    end
-
-    return message
-
-end
-
-# constructor to infer type automatically:
-DeterministicEnsembleModel(atom::Atom, atomic_weights,
-                           bagging_fraction, rng, n, acceleration, out_of_bag_measure) where Atom<:Deterministic =
-                               DeterministicEnsembleModel{Atom}(atom, atomic_weights,
-                                                                   bagging_fraction, rng, n, acceleration, out_of_bag_measure)
-
-# lazy keyword constructors:
-function DeterministicEnsembleModel(;atom=DeterministicConstantClassifier(),
-                                    atomic_weights=Float64[],
-                                    bagging_fraction=0.8,
-                                    rng=Random.GLOBAL_RNG,
-                                    n::Int=100,
-                                    acceleration=default_resource(),
-                                    out_of_bag_measure=[])
-
-    model = DeterministicEnsembleModel(atom, atomic_weights, bagging_fraction, rng,
-                                       n, acceleration, out_of_bag_measure)
-
-    message = clean!(model)
-    isempty(message) || @warn message
-
-    return model
-end
-
-
-## ENSEMBLE MODEL FOR PROBABILISTIC MODELS
-
 mutable struct ProbabilisticEnsembleModel{Atom<:Probabilistic} <: Probabilistic
-    atom::Atom
+    model::Atom
     atomic_weights::Vector{Float64}
     bagging_fraction::Float64
     rng::Union{Int, AbstractRNG}
@@ -269,7 +201,18 @@ mutable struct ProbabilisticEnsembleModel{Atom<:Probabilistic} <: Probabilistic
     out_of_bag_measure
 end
 
-function clean!(model::ProbabilisticEnsembleModel)
+const EitherEnsembleModel{Atom} =
+    Union{DeterministicEnsembleModel{Atom}, ProbabilisticEnsembleModel{Atom}}
+
+function clean!(model::EitherEnsembleModel)
+
+    if model isa DeterministicEnsembleModel
+
+        ok_target = target_scitype(model.model) <:
+            Union{AbstractVector{<:Finite},AbstractVector{<:Continuous}}
+        ok_target || error("atomic model has unsupported target_scitype "*
+                           "`$(target_scitype(model.model))`. ")
+    end
 
     message = ""
 
@@ -279,10 +222,17 @@ function clean!(model::ProbabilisticEnsembleModel)
         model.bagging_fraction = 1.0
     end
 
-    if !isempty(model.atomic_weights)
+    isempty(model.atomic_weights) && return message
+
+    if model isa Deterministic &&
+        target_scitype(model.model) <: AbstractVector{<:Finite}
+        message = message*"`atomic_weights` will be ignored to "*
+            "form predictions, as unsupported for `Finite` targets. "
+    else
         total = sum(model.atomic_weights)
         if !(total ≈ 1.0)
-            message = message*"atomic_weights should sum to one and are being automatically normalized. "
+            message = message*"atomic_weights should sum to one and are being "*
+                "replaced by normalized weights. "
             model.atomic_weights = model.atomic_weights/total
         end
     end
@@ -291,37 +241,23 @@ function clean!(model::ProbabilisticEnsembleModel)
 
 end
 
-# constructor to infer type automatically:
-ProbabilisticEnsembleModel(atom::Atom, atomic_weights, bagging_fraction, rng, n, acceleration, out_of_bag_measure) where Atom<:Probabilistic =
-                               ProbabilisticEnsembleModel{Atom}(atom, atomic_weights, bagging_fraction, rng, n, acceleration, out_of_bag_measure)
 
-# lazy keyword constructor:
-function ProbabilisticEnsembleModel(;atom=ConstantProbabilisticClassifier(),
-                                    atomic_weights=Float64[],
-                                    bagging_fraction=0.8,
-                                    rng=Random.GLOBAL_RNG,
-                                    n::Int=100,
-                                    acceleration=default_resource(),
-                                    out_of_bag_measure=[])
+# # USER-FACING CONSTRUCTOR
 
-    model = ProbabilisticEnsembleModel(atom, atomic_weights, bagging_fraction, rng, n, acceleration, out_of_bag_measure)
+const ERR_MODEL_UNSPECIFIED = ArgumentError(
+"Expecting atomic model as argument. None specified. Use "*
+    "`EnsembleModel(model=...)`. ")
+const ERR_TOO_MANY_ARGUMENTS = ArgumentError(
+    "At most one non-keyword argument, a model, allowed. ")
 
-    message = clean!(model)
-    isempty(message) || @warn message
-
-    return model
-end
-
-
-## COMMON CONSTRUCTOR
 
 """
-    EnsembleModel(atom=nothing,
+    EnsembleModel(model,
                   atomic_weights=Float64[],
                   bagging_fraction=0.8,
                   n=100,
                   rng=GLOBAL_RNG,
-                  acceleration=default_resource(),
+                  acceleration=CPU1(),
                   out_of_bag_measure=[])
 
 Create a model for training an ensemble of `n` learners, with optional
@@ -372,25 +308,49 @@ measures specified in `out_of_bag_measure` that support sample
 weights.
 
 """
-function EnsembleModel(; args...)
-    d = Dict(args)
-    :atom in keys(d) ||
-        error("No atomic model specified. Use EnsembleModel(atom=...)")
-    if d[:atom] isa Deterministic
-        return DeterministicEnsembleModel(; d...)
-    elseif d[:atom] isa Probabilistic
-        return ProbabilisticEnsembleModel(; d...)
+function EnsembleModel(args...;
+                       model=nothing,
+                       atomic_weights=Float64[],
+                       bagging_fraction=0.8,
+                       rng=Random.GLOBAL_RNG,
+                       n::Int=100,
+                       acceleration=CPU1(),
+                       out_of_bag_measure=[])
+
+    length(args) < 2 || throw(ERR_TOO_MANY_ARGUMENTS)
+    if length(args) === 1
+        atom = first(args)
+        model === nothing ||
+            @warn "Using `model=$atom`. Ignoring specification "*
+            "`model=$model`. "
+    else
+        model === nothing && throw(ERR_MODEL_UNSPECIFIED)
+        atom = model
     end
-    error("$(d[:atom]) does not appear to be a Supervised model.")
+
+    arguments = (atom,
+                 atomic_weights,
+                 float(bagging_fraction),
+                 rng,
+                 n,
+                 acceleration,
+                 out_of_bag_measure)
+
+    if atom isa Deterministic
+        emodel =  DeterministicEnsembleModel(arguments...)
+    elseif atom isa Probabilistic
+        emodel = ProbabilisticEnsembleModel(arguments...)
+    else
+        error("$atom does not appear to be a Supervised model.")
+    end
+
+    message = clean!(emodel)
+    isempty(message) || @warn message
+    return emodel
 end
 
 
-## THE COMMON FIT AND PREDICT METHODS
-
-const EitherEnsembleModel{Atom} =
-    Union{DeterministicEnsembleModel{Atom}, ProbabilisticEnsembleModel{Atom}}
-
-MLJBase.is_wrapper(::Type{<:EitherEnsembleModel}) = true
+# # THE COMMON FIT AND PREDICT METHODS
 
 function _fit(res::CPU1, func, verbosity, stuff)
     atom, n, n_patterns, n_train, rng, progress_meter, args = stuff
@@ -438,7 +398,7 @@ end
     end
 end
 
-function fit(model::EitherEnsembleModel{Atom},
+function MMI.fit(model::EitherEnsembleModel{Atom},
              verbosity::Int, args...) where Atom<:Supervised
 
     X = args[1]
@@ -466,7 +426,7 @@ function fit(model::EitherEnsembleModel{Atom},
         rng = model.rng
     end
 
-    atom = model.atom
+    atom = model.model
     n = model.n
     n_patterns = nrows(y)
     n_train = round(Int, floor(model.bagging_fraction*n_patterns))
@@ -487,7 +447,7 @@ function fit(model::EitherEnsembleModel{Atom},
 
     end
 
-    fitresult = WrappedEnsemble(model.atom, ensemble)
+    fitresult = WrappedEnsemble(model.model, ensemble)
 
     if !isempty(out_of_bag_measure)
 
@@ -511,10 +471,15 @@ function fit(model::EitherEnsembleModel{Atom},
             end
             for k in eachindex(out_of_bag_measure)
                 m = out_of_bag_measure[k]
-                if reports_each_observation(m)
-                    s =  aggregate(value(m, yhat, Xtest, ytest, wtest), m)
+                if MMI.reports_each_observation(m)
+                    s =  MLJBase.aggregate(MLJBase.value(m,
+                                                         yhat,
+                                                         Xtest,
+                                                         ytest,
+                                                         wtest),
+                                           m)
                 else
-                    s = value(m, yhat, Xtest, ytest, wtest)
+                    s = MLJBase.value(m, yhat, Xtest, ytest, wtest)
                 end
                 metrics[i,k] = s
             end
@@ -522,7 +487,7 @@ function fit(model::EitherEnsembleModel{Atom},
 
         # aggregate metrics across the ensembles:
         aggregated_metrics = map(eachindex(out_of_bag_measure)) do k
-            aggregate(metrics[:,k], out_of_bag_measure[k])
+            MLJBase.aggregate(metrics[:,k], out_of_bag_measure[k])
         end
 
         names = Symbol.(string.(out_of_bag_measure))
@@ -540,12 +505,12 @@ end
 
 # if n is only parameter that changes, we just append to the existing
 # ensemble, or truncate it:
-function update(model::EitherEnsembleModel,
-                verbosity::Int, fitresult, old_model, args...)
+function MMI.update(model::EitherEnsembleModel,
+                                  verbosity::Int, fitresult, old_model, args...)
 
     n = model.n
 
-    if MLJBase.is_same_except(model.atom, old_model.atom,
+    if MLJBase.is_same_except(model.model, old_model.model,
                               :n, :atomic_weights, :acceleration)
         if n > old_model.n
             verbosity < 1 ||
@@ -568,7 +533,7 @@ function update(model::EitherEnsembleModel,
 
 end
 
-function predict(model::EitherEnsembleModel, fitresult, Xnew)
+function MMI.predict(model::EitherEnsembleModel, fitresult, Xnew)
 
     n = model.n
     if isempty(model.atomic_weights)
@@ -581,35 +546,27 @@ function predict(model::EitherEnsembleModel, fitresult, Xnew)
     predict(fitresult, atomic_weights, Xnew)
 end
 
-## METADATA
+
+# # METADATA
 
 # Note: input and target traits are inherited from atom
 
-MLJBase.supports_weights(::Type{<:EitherEnsembleModel{Atom}}) where Atom =
-    MLJBase.supports_weights(Atom)
-
-MLJBase.load_path(::Type{<:DeterministicEnsembleModel}) =
-    "MLJ.DeterministicEnsembleModel"
-MLJBase.package_name(::Type{<:DeterministicEnsembleModel}) = "MLJ"
-MLJBase.package_uuid(::Type{<:DeterministicEnsembleModel}) = ""
-MLJBase.package_url(::Type{<:DeterministicEnsembleModel}) =
-    "https://github.com/alan-turing-institute/MLJ.jl"
-MLJBase.is_pure_julia(::Type{<:DeterministicEnsembleModel{Atom}}) where Atom =
-    MLJBase.is_pure_julia(Atom)
-MLJBase.input_scitype(::Type{<:DeterministicEnsembleModel{Atom}}) where Atom =
-    MLJBase.input_scitype(Atom)
-MLJBase.target_scitype(::Type{<:DeterministicEnsembleModel{Atom}}) where Atom =
-    MLJBase.target_scitype(Atom)
-
-MLJBase.load_path(::Type{<:ProbabilisticEnsembleModel}) =
+MMI.load_path(::Type{<:ProbabilisticEnsembleModel}) =
     "MLJ.ProbabilisticEnsembleModel"
-MLJBase.package_name(::Type{<:ProbabilisticEnsembleModel}) = "MLJ"
-MLJBase.package_uuid(::Type{<:ProbabilisticEnsembleModel}) = ""
-MLJBase.package_url(::Type{<:ProbabilisticEnsembleModel}) =
-    "https://github.com/alan-turing-institute/MLJ.jl"
-MLJBase.is_pure_julia(::Type{<:ProbabilisticEnsembleModel{Atom}}) where Atom =
-    MLJBase.is_pure_julia(Atom)
-MLJBase.input_scitype(::Type{<:ProbabilisticEnsembleModel{Atom}}) where Atom =
-    MLJBase.input_scitype(Atom)
-MLJBase.target_scitype(::Type{<:ProbabilisticEnsembleModel{Atom}}) where Atom =
-    MLJBase.target_scitype(Atom)
+MMI.load_path(::Type{<:DeterministicEnsembleModel}) =
+    "MLJ.DeterministicEnsembleModel"
+
+MMI.is_wrapper(::Type{<:EitherEnsembleModel}) = true
+MMI.supports_weights(::Type{<:EitherEnsembleModel{Atom}}) where Atom =
+    MMI.supports_weights(Atom)
+MMI.package_name(::Type{<:EitherEnsembleModel}) = "MLJEnsembles"
+MMI.package_uuid(::Type{<:EitherEnsembleModel}) =
+    "50ed68f4-41fd-4504-931a-ed422449fee0"
+MMI.package_url(::Type{<:EitherEnsembleModel}) =
+    "https://github.com/JuliaAI/MLJEnsembles.jl"
+MMI.is_pure_julia(::Type{<:EitherEnsembleModel{Atom}}) where Atom =
+    MMI.is_pure_julia(Atom)
+MMI.input_scitype(::Type{<:EitherEnsembleModel{Atom}}) where Atom =
+    MMI.input_scitype(Atom)
+MMI.target_scitype(::Type{<:EitherEnsembleModel{Atom}}) where Atom =
+    MMI.target_scitype(Atom)

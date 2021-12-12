@@ -5,11 +5,10 @@ using Random
 using StableRNGs
 using MLJEnsembles
 using MLJBase
-using MLJModels
+using ..Models
 using CategoricalArrays
 import Distributions
 
-KNNRegressor = @load KNNRegressor verbosity=0
 
 ## HELPER FUNCTIONS
 
@@ -20,10 +19,10 @@ KNNRegressor = @load KNNRegressor verbosity=0
 pair_vcat(p, q) = (vcat(p[1], q[1]), vcat(p[2], q[2]))
 
 
-## WRAPPED ENSEMBLES OF FITRESULTS
+## WRAPPED ENSEMBLES OF FITRESU
 
 # target is :deterministic :multiclass false:
-atom = MLJModels.DeterministicConstantClassifier()
+atom = DeterministicConstantClassifier()
 L = ['a', 'b', 'j']
 L2 = categorical(L)
 ensemble = [L2[1], L2[3], L2[3], L2[2]]
@@ -35,7 +34,7 @@ X = MLJEnsembles.table(rand(3,5))
     categorical(vcat(['j','j','j'],L))[1:3]
 
 # target is :deterministic :continuous false:
-atom = MLJModels.DeterministicConstantRegressor()
+atom = DeterministicConstantRegressor()
 ensemble = Float64[4, 7, 4, 4]
 atomic_weights = [0.1, 0.5, 0.2, 0.2]
 wens = MLJEnsembles.WrappedEnsemble(atom, ensemble)
@@ -45,9 +44,9 @@ wens = MLJEnsembles.WrappedEnsemble(atom, ensemble)
 atom = ConstantClassifier()
 L = categorical(['a', 'b', 'j'])
 d1 = UnivariateFinite(L, [0.1, 0.2, 0.7])
-fitresult1 = (L, pdf([d1, ], L))
+fitresult1 = d1
 d2 = UnivariateFinite(L, [0.2, 0.3, 0.5])
-fitresult2 = (L, pdf([d2, ], L))
+fitresult2 = d2
 ensemble = [fitresult2, fitresult1, fitresult2, fitresult2]
 atomic_weights = [0.1, 0.5, 0.2, 0.2]
 wens = MLJEnsembles.WrappedEnsemble(atom, ensemble)
@@ -71,11 +70,11 @@ d = predict(wens, atomic_weights, X)[1]
 ## ENSEMBLE MODEL
 
 # target is :deterministic :multiclass false:
-atom=MLJModels.DeterministicConstantClassifier()
+atom=DeterministicConstantClassifier()
 X = MLJEnsembles.table(ones(5,3))
 y = categorical(collect("asdfa"))
 train, test = partition(1:length(y), 0.8);
-ensemble_model = MLJEnsembles.DeterministicEnsembleModel(atom=atom)
+ensemble_model = EnsembleModel(model=atom)
 ensemble_model.n = 10
 fitresult, cache, report = MLJEnsembles.fit(ensemble_model, 0, X, y)
 predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))
@@ -87,11 +86,11 @@ p = predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))
 @test MLJBase.target_scitype(ensemble_model) == MLJBase.target_scitype(atom)
 
 # target is :deterministic :continuous false:
-atom = MLJModels.DeterministicConstantRegressor()
+atom = DeterministicConstantRegressor()
 X = MLJEnsembles.table(ones(5,3))
 y = Float64[1.0, 2.0, 1.0, 1.0, 1.0]
 train, test = partition(1:length(y), 0.8);
-ensemble_model = MLJEnsembles.DeterministicEnsembleModel(atom=atom)
+ensemble_model = EnsembleModel(model=atom)
 ensemble_model.n = 10
 fitresult, cache, report = MLJEnsembles.fit(ensemble_model, 0, X, y)
 @test reduce(* , [x ≈ 1.0 || x ≈ 1.25 for x in fitresult.ensemble])
@@ -106,21 +105,21 @@ ensemble_model.atomic_weights = atomic_weights
 predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))
 
 # target is :deterministic :continuous false:
-atom = MLJModels.DeterministicConstantRegressor()
+atom = DeterministicConstantRegressor()
 rng = StableRNG(1234)
 X = MLJEnsembles.table(randn(rng, 10, 3))
 y = selectcols(X, 1)
 std(y)
 train, test = partition(1:length(y), 0.8);
-ensemble_model = MLJEnsembles.DeterministicEnsembleModel(atom=atom, rng=rng)
-ensemble_model.out_of_bag_measure = [MLJEnsembles.rms,MLJEnsembles.rmsp]
+ensemble_model = EnsembleModel(model=atom, rng=rng)
+ensemble_model.out_of_bag_measure = [rms, rmsp]
 ensemble_model.n = 10
 fitresult, cache, report = MLJEnsembles.fit(ensemble_model, 0, X, y)
 # TODO: the following test fails in distributed version (because of
 # multiple rng's ?)
 @test abs(report.oob_measurements[1] - std(y)) < 0.25
-ensemble_model = MLJEnsembles.DeterministicEnsembleModel(atom=atom,rng=Random.MersenneTwister(1))
-ensemble_model.out_of_bag_measure = MLJEnsembles.rms
+ensemble_model = EnsembleModel(model=atom,rng=Random.MersenneTwister(1))
+ensemble_model.out_of_bag_measure = rms
 ensemble_model.n = 2
 fitresult, cache, report = MLJEnsembles.fit(ensemble_model, 0, X, y)
 
@@ -129,7 +128,7 @@ atom = ConstantClassifier()
 X = MLJEnsembles.table(ones(5,3))
 y = categorical(collect("asdfa"))
 train, test = partition(1:length(y), 0.8);
-ensemble_model = MLJEnsembles.ProbabilisticEnsembleModel(atom=atom)
+ensemble_model = EnsembleModel(model=atom)
 ensemble_model.n = 10
 fitresult, cache, report = MLJEnsembles.fit(ensemble_model, 0, X, y)
 fitresult.ensemble
@@ -159,7 +158,7 @@ atom = ConstantRegressor()
 X = MLJEnsembles.table(ones(5,3))
 y = Float64[1.0, 2.0, 2.0, 1.0, 1.0]
 train, test = partition(1:length(y), 0.8);
-ensemble_model = MLJEnsembles.ProbabilisticEnsembleModel(atom=atom)
+ensemble_model = EnsembleModel(model=atom)
 ensemble_model.n = 10
 fitresult, cache, report = MLJEnsembles.fit(ensemble_model, 0, X, y)
 d1 = Distributions.fit(Distributions.Normal, [1,1,2,2])
@@ -183,18 +182,18 @@ predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))
 # @test MLJBase.output_is(ensemble_model) == MLJBase.output_is(atom)
 
 # test generic constructor:
-@test EnsembleModel(atom=ConstantRegressor()) isa Probabilistic
-@test EnsembleModel(atom=MLJModels.DeterministicConstantRegressor()) isa Deterministic
+@test EnsembleModel(model=ConstantRegressor()) isa Probabilistic
+@test EnsembleModel(model=DeterministicConstantRegressor()) isa Deterministic
 
 @testset "further test of sample weights" begin
     rng = StableRNG(123)
     N = 20
     X = (x = rand(rng, 3N), );
     y = categorical(rand(rng, "abbbc", 3N));
-    atom = (@load KNNClassifier verbosity=0)()
-    ensemble_model = MLJEnsembles.ProbabilisticEnsembleModel(atom=atom,
-                                                    bagging_fraction=1,
-                                                    n = 5, rng=rng)
+    atom = KNNClassifier()
+    ensemble_model = EnsembleModel(model=atom,
+                                   bagging_fraction=1,
+                                   n = 5, rng=rng)
     fitresult, cache, report = MLJEnsembles.fit(ensemble_model, 0, X, y)
     @test predict_mode(ensemble_model, fitresult, (x = [0, ],))[1] == 'b'
     w = map(y) do η
@@ -219,34 +218,35 @@ predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))
 end
 
 
-    ## MACHINE TEST (INCLUDES TEST OF UPDATE)
+## MACHINE TEST (INCLUDES TEST OF UPDATE)
 
 N =100
 X = (x1=rand(N), x2=rand(N), x3=rand(N))
 y = 2X.x1  - X.x2 + 0.05*rand(N)
 
 atom = KNNRegressor(K=7)
-ensemble_model = EnsembleModel(atom=atom)
+ensemble_model = EnsembleModel(model=atom)
 ensemble = machine(ensemble_model, X, y)
 train, test = partition(eachindex(y), 0.7)
 fit!(ensemble, rows=train, verbosity=0)
 @test length(ensemble.fitresult.ensemble) == ensemble_model.n
 ensemble_model.n = 15
 @test_logs((:info, r"Training"),
-          fit!(ensemble))
+          fit!(ensemble, verbosity=1))
 @test length(ensemble.fitresult.ensemble) == 15
 ensemble_model.n = 20
 @test_logs((:info, r"Updating"),
-           # (:info, r"Building"),
+           (:info, r"Building"),
            fit!(ensemble))
 @test length(ensemble.fitresult.ensemble) == 20
 ensemble_model.n = 5
 @test_logs((:info, r"Updating"),
-           # (:info, r"Truncating"),
+           (:info, r"Truncating"),
            fit!(ensemble))
 @test length(ensemble.fitresult.ensemble) == 5
 
 @test !isnan(predict(ensemble, MLJEnsembles.selectrows(X, test))[1])
 
 end
+
 true
