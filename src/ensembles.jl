@@ -260,26 +260,25 @@ const ERR_TOO_MANY_ARGUMENTS = ArgumentError(
                   acceleration=CPU1(),
                   out_of_bag_measure=[])
 
-Create a model for training an ensemble of `n` learners, with optional
-bagging, each with associated model `atom`. Ensembling is useful if
-`fit!(machine(atom, data...))` does not create identical models on
-repeated calls (ie, is a stochastic model, such as a decision tree
-with randomized node selection criteria), or if `bagging_fraction` is
-set to a value less than 1.0, or both. The constructor fails if no
-`atom` is specified.
+Create a model for training an ensemble of `n` clones of `model`, with
+optional bagging. Ensembling is useful if `fit!(machine(atom,
+data...))` does not create identical models on repeated calls (ie, is
+a stochastic model, such as a decision tree with randomized node
+selection criteria), or if `bagging_fraction` is set to a value less
+than 1.0, or both.
 
-Only atomic models supporting targets with scitype
-`AbstractVector{<:Finite}` (univariate classifiers) or
-`AbstractVector{<:Continuous}` (univariate regressors) are supported.
+Here the atomic `model` must support targets with scitype
+`AbstractVector{<:Finite}` (single-target classifiers) or
+`AbstractVector{<:Continuous}` (single-target regressors).
 
 If `rng` is an integer, then `MersenneTwister(rng)` is the random
 number generator used for bagging. Otherwise some `AbstractRNG` object
 is expected.
 
-The atomic predictions are weighted according to the vector
+The atomic predictions are optionally weighted according to the vector
 `atomic_weights` (to allow for external optimization) except in the
-case that `atom` is a `Deterministic` classifier. Uniform
-atomic weights are used if `weight` has zero length.
+case that `model` is a `Deterministic` classifier, in which case
+`atomic_weights` are ignored.
 
 The ensemble model is `Deterministic` or `Probabilistic`, according to
 the corresponding supertype of `atom`. In the case of deterministic
@@ -292,20 +291,19 @@ particular, for regressors, the ensemble prediction on each input
 pattern has the type `MixtureModel{VF,VS,D}` from the Distributions.jl
 package, where `D` is the type of predicted distribution for `atom`.
 
-The `acceleration` keyword argument is used to specify the compute resource (a
-subtype of `ComputationalResources.AbstractResource`) that will be used to
-accelerate/parallelize ensemble fitting.
+Specify `acceleration=CPUProcesses()` for distributed computing, or
+`CPUThreads()` for multithreading.
 
 If a single measure or non-empty vector of measures is specified by
 `out_of_bag_measure`, then out-of-bag estimates of performance are
-written to the trainig report (call `report` on the trained
+written to the training report (call `report` on the trained
 machine wrapping the ensemble model).
 
-*Important:* If sample weights `w` (as opposed to atomic weights) are
-specified when constructing a machine for the ensemble model, as in
-`mach = machine(ensemble_model, X, y, w)`, then `w` is used by any
-measures specified in `out_of_bag_measure` that support sample
-weights.
+*Important:* If sample weights `w` (not to be confused with atomic
+weights) are specified when constructing a machine for the ensemble
+model, as in `mach = machine(ensemble_model, X, y, w)`, then `w` is
+used by any measures specified in `out_of_bag_measure` that support
+sample weights.
 
 """
 function EnsembleModel(args...;
@@ -411,7 +409,7 @@ function MMI.fit(model::EitherEnsembleModel{Atom},
 
     acceleration = model.acceleration
     if acceleration isa CPUProcesses && nworkers() == 1
-        acceleration = default_resource()
+        acceleration = CPU1()
     end
 
     if model.out_of_bag_measure isa Vector
