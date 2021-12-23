@@ -1,7 +1,7 @@
 name = "MLJEnsembles"
 uuid = "50ed68f4-41fd-4504-931a-ed422449fee0"
 authors = ["Anthony D. Blaom <anthony.blaom@gmail.com>"]
-version = "0.1.2"
+version = "0.2.0"
 
 [deps]
 CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
