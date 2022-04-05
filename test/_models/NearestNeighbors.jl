@@ -1,3 +1,7 @@
+##
+## Generic Definition of KNNRegressoor and KNNClassifier (FOR TESTING)
+##
+
 export KNNRegressor, KNNClassifier
 
 using Distances
@@ -69,7 +73,7 @@ end
 const KNN = Union{KNNRegressor, KNNClassifier}
 
 function MLJBase.fit(m::KNN, verbosity::Int, X, y, w=nothing)
-    Xmatrix = MLJBase.matrix(X, transpose=true) # NOTE: copies the data
+    Xmatrix = permutedims(X) # takes the transpose of X (copies data)
     if m.algorithm == :kdtree
         tree = NN.KDTree(Xmatrix; leafsize=m.leafsize, reorder=m.reorder)
     elseif m.algorithm == :balltree
@@ -84,7 +88,7 @@ end
 MLJBase.fitted_params(model::KNN, (tree, _)) = (tree=tree,)
 
 function MLJBase.predict(m::KNNClassifier, (tree, y, w), X)
-    Xmatrix = MLJBase.matrix(X, transpose=true) # NOTE: copies the data
+    Xmatrix = permutedims(X) # takes the transpose of X (copies data)
     # for each entry, get the K closest training point + their distance
     idxs, dists = NN.knn(tree, Xmatrix, m.K)
 
@@ -120,7 +124,7 @@ function MLJBase.predict(m::KNNClassifier, (tree, y, w), X)
 end
 
 function MLJBase.predict(m::KNNRegressor, (tree, y, w), X)
-    Xmatrix     = MLJBase.matrix(X, transpose=true) # NOTE: copies the data
+    Xmatrix = permutedims(X) # takes the transpose of X (copies data)
     idxs, dists = NN.knn(tree, Xmatrix, m.K)
     preds       = zeros(length(idxs))
 
@@ -141,6 +145,14 @@ function MLJBase.predict(m::KNNRegressor, (tree, y, w), X)
     end
     return preds
 end
+
+# Data front-end (necessary for testing compatibility of `Ensembles` with atom models 
+# with different data front-end)
+MMI.reformat(::KNN, X) = (MMI.matrix(X),)
+MMI.reformat(::KNN, X, args...) = (MMI.matrix(X), args...)
+MMI.selectrows(::KNN, I, A) = (view(A, I, :),)
+MMI.selectrows(::KNN, I, A, y) = (view(A, I, :), y[I])
+MMI.selectrows(::KNN, I, A, y, w) = (view(A, I, :), y[I], w[I])
 
 # ====
 

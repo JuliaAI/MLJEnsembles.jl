@@ -21,6 +21,9 @@ function WrappedEnsemble(atom, ensemble::AbstractVector{L}) where L
 end
 
 # to enable trait-based dispatch of predict:
+# The following definitions of `predict` function on `WrappedEnsemble`s, 
+# Xnew` is assumed to be the output of `reformat(atom::Atom, X)` where
+# `X` is the generic representation.
 function predict(wens::WrappedEnsemble{R,Atom}, atomic_weights, Xnew
                  ) where {R,Atom<:Deterministic}
     predict(wens, atomic_weights, Xnew, Deterministic, target_scitype(Atom))
@@ -128,13 +131,13 @@ function get_ensemble_and_indices(atom::Supervised, verbosity, n, n_patterns,
                       n_train, rng, progress_meter, args...)
 
     ensemble_indices =
-        [StatsBase.sample(rng, 1:n_patterns, n_train, replace=false)
-         for i in 1:n]
+        [StatsBase.sample(rng, 1:n_patterns, n_train, replace=false) for i in 1:n]
     ensemble = map(ensemble_indices) do train_rows
         verbosity == 1 && next!(progress_meter)
         verbosity < 2 ||  print("#")
-        atom_fitresult, atom_cache, atom_report =
-            fit(atom, verbosity - 1, [selectrows(arg, train_rows) for arg in args]...)
+        atom_fitresult, atom_cache, atom_report = fit(
+            atom, verbosity - 1, selectrows(atom, train_rows, args...)...
+        )
         atom_fitresult
     end
     verbosity < 1 || println()
@@ -153,16 +156,15 @@ function get_ensemble(atom::Supervised, verbosity, n, n_patterns,
         ensemble_indices = (1:n_patterns for i in 1:n)
     else
         ensemble_indices =
-            (StatsBase.sample(rng, 1:n_patterns, n_train, replace=false)
-             for i in 1:n)
+            (StatsBase.sample(rng, 1:n_patterns, n_train, replace=false) for i in 1:n)
     end
 
     ensemble = map(ensemble_indices) do train_rows
         verbosity == 1 && next!(progress_meter)
         verbosity < 2 ||  print("#")
-        atom_fitresult, atom_cache, atom_report =
-            fit(atom, verbosity - 1, [selectrows(arg, train_rows) for
-                                      arg in args]...)
+        atom_fitresult, atom_cache, atom_report = fit(
+            atom, verbosity - 1, selectrows(atom, train_rows, args...)...
+        )
         atom_fitresult
     end
     verbosity < 1 || println()
@@ -306,14 +308,16 @@ used by any measures specified in `out_of_bag_measure` that support
 sample weights.
 
 """
-function EnsembleModel(args...;
-                       model=nothing,
-                       atomic_weights=Float64[],
-                       bagging_fraction=0.8,
-                       rng=Random.GLOBAL_RNG,
-                       n::Int=100,
-                       acceleration=CPU1(),
-                       out_of_bag_measure=[])
+function EnsembleModel(
+    args...;
+    model=nothing,
+    atomic_weights=Float64[],
+    bagging_fraction=0.8,
+    rng=Random.GLOBAL_RNG,
+    n::Int=100,
+    acceleration=CPU1(),
+    out_of_bag_measure=[]
+)
 
     length(args) < 2 || throw(ERR_TOO_MANY_ARGUMENTS)
     if length(args) === 1
@@ -326,13 +330,15 @@ function EnsembleModel(args...;
         atom = model
     end
 
-    arguments = (atom,
-                 atomic_weights,
-                 float(bagging_fraction),
-                 rng,
-                 n,
-                 acceleration,
-                 out_of_bag_measure)
+    arguments = (
+        atom,
+        atomic_weights,
+        float(bagging_fraction),
+        rng,
+        n,
+        acceleration,
+        out_of_bag_measure
+    )
 
     if atom isa Deterministic
         emodel =  DeterministicEnsembleModel(arguments...)
@@ -353,26 +359,27 @@ end
 function _fit(res::CPU1, func, verbosity, stuff)
     atom, n, n_patterns, n_train, rng, progress_meter, args = stuff
     verbosity < 2 ||  @info "One hash per new atom trained: "
-    return func(atom, verbosity, n, n_patterns, n_train, rng,
-                progress_meter, args...)
+    return func(atom, verbosity, n, n_patterns, n_train, rng, progress_meter, args...)
 end
+
 function _fit(res::CPUProcesses, func, verbosity, stuff)
     atom, n, n_patterns, n_train, rng, progress_meter, args = stuff
     if verbosity > 0
         println("Ensemble-building in parallel on $(nworkers()) processors.")
     end
+
     chunk_size = div(n, nworkers())
     left_over = mod(n, nworkers())
+
     return @distributed (_reducer) for i = 1:nworkers()
         if i != nworkers()
-            func(atom, 0, chunk_size, n_patterns, n_train,
-                 rng, progress_meter, args...)
+            func(atom, 0, chunk_size, n_patterns, n_train, rng, progress_meter, args...)
         else
-            func(atom, 0, chunk_size + left_over, n_patterns, n_train,
-                 rng, progress_meter, args...)
+            func(atom, 0, chunk_size + left_over, n_patterns, n_train, rng, progress_meter, args...)
         end
     end
 end
+
 @static if VERSION >= v"1.3.0-DEV.573"
     function _fit(res::CPUThreads, func, verbosity, stuff)
         atom, n, n_patterns, n_train, rng, progress_meter, args = stuff
@@ -383,21 +390,22 @@ end
         chunk_size = div(n, nthreads)
         left_over = mod(n, nthreads)
         resvec = Vector(undef, nthreads) # FIXME: Make this type-stable?
+
         Threads.@threads for i = 1:nthreads
             resvec[i] = if i != nworkers()
-                func(atom, 0, chunk_size, n_patterns, n_train,
-                             rng, progress_meter, args...)
+                func(atom, 0, chunk_size, n_patterns, n_train, rng, progress_meter, args...)
             else
-                func(atom, 0, chunk_size + left_over, n_patterns, n_train,
-                             rng, progress_meter, args...)
+                func(atom, 0, chunk_size + left_over, n_patterns, n_train, rng, progress_meter, args...)
             end
         end
+
         return reduce(_reducer, resvec)
     end
 end
 
-function MMI.fit(model::EitherEnsembleModel{Atom},
-             verbosity::Int, args...) where Atom<:Supervised
+function MMI.fit(
+    model::EitherEnsembleModel{Atom}, verbosity::Int, args...
+) where Atom<:Supervised
 
     X = args[1]
     y = args[2]
@@ -406,6 +414,12 @@ function MMI.fit(model::EitherEnsembleModel{Atom},
     else
         w = nothing
     end
+
+    # model specific reformated args is required for calling 
+    # `fit`/`predict` on the `atom` model.
+    atom = model.model
+    atom_specific_args = MMI.reformat(atom, args...)
+    atom_specific_X = atom_specific_args[1]
 
     acceleration = model.acceleration
     if acceleration isa CPUProcesses && nworkers() == 1
@@ -424,25 +438,26 @@ function MMI.fit(model::EitherEnsembleModel{Atom},
         rng = model.rng
     end
 
-    atom = model.model
     n = model.n
     n_patterns = nrows(y)
     n_train = round(Int, floor(model.bagging_fraction*n_patterns))
 
-    progress_meter = Progress(n, dt=0.5, desc="Training ensemble: ",
-               barglyphs=BarGlyphs("[=> ]"), barlen=50, color=:yellow)
+    progress_meter = Progress(
+        n,
+        dt=0.5,
+        desc="Training ensemble: ",
+        barglyphs=BarGlyphs("[=> ]"),
+        barlen=50,
+        color=:yellow
+    )
 
+    stuff = (atom, n, n_patterns, n_train, rng, progress_meter, atom_specific_args)
     if !isempty(out_of_bag_measure)
-
-        stuff = atom, n, n_patterns, n_train, rng, progress_meter, args
-        ensemble, ensemble_indices =
-            _fit(acceleration, get_ensemble_and_indices, verbosity, stuff)
-
+        ensemble, ensemble_indices = _fit(
+            acceleration, get_ensemble_and_indices, verbosity, stuff
+        )
     else
-
-        stuff = atom, n, n_patterns, n_train, rng, progress_meter, args
         ensemble = _fit(acceleration, get_ensemble, verbosity, stuff)
-
     end
 
     fitresult = WrappedEnsemble(model.model, ensemble)
@@ -458,24 +473,23 @@ function MMI.fit(model::EitherEnsembleModel{Atom},
                       "Data size too small or "*
                       "bagging_fraction too close to 1.0. ")
             end
-            yhat = predict(atom, ensemble[i],
-                           selectrows(X, ooB_indices))
+            yhat = predict(atom, ensemble[i], selectrows(atom, ooB_indices, atom_specific_X)...)
             Xtest = selectrows(X, ooB_indices)
             ytest = selectrows(y, ooB_indices)
+
             if w === nothing
                 wtest = nothing
             else
                 wtest = selectrows(w, ooB_indices)
             end
+
             for k in eachindex(out_of_bag_measure)
                 m = out_of_bag_measure[k]
                 if MMI.reports_each_observation(m)
-                    s =  MLJBase.aggregate(MLJBase.value(m,
-                                                         yhat,
-                                                         Xtest,
-                                                         ytest,
-                                                         wtest),
-                                           m)
+                    s =  MLJBase.aggregate(
+                        MLJBase.value(m, yhat, Xtest, ytest, wtest),
+                        m
+                    )
                 else
                     s = MLJBase.value(m, yhat, Xtest, ytest, wtest)
                 end
@@ -541,7 +555,8 @@ function MMI.predict(model::EitherEnsembleModel, fitresult, Xnew)
             error("Ensemble size and number of atomic_weights not the same.")
         atomic_weights = model.atomic_weights
     end
-    predict(fitresult, atomic_weights, Xnew)
+    atom = model.model
+    return predict(fitresult, atomic_weights, reformat(atom, Xnew)...)
 end
 
 
