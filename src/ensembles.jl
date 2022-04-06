@@ -21,9 +21,9 @@ function WrappedEnsemble(atom, ensemble::AbstractVector{L}) where L
 end
 
 # to enable trait-based dispatch of predict:
-# The following definitions of `predict` function on `WrappedEnsemble`s, 
+# The following definitions of `predict` function on `WrappedEnsemble`s,
 # Xnew` is assumed to be the output of `reformat(atom::Atom, X)` where
-# `X` is the generic representation.
+# `X` is the external (user-supplied) representation.
 function predict(wens::WrappedEnsemble{R,Atom}, atomic_weights, Xnew
                  ) where {R,Atom<:Deterministic}
     predict(wens, atomic_weights, Xnew, Deterministic, target_scitype(Atom))
@@ -415,7 +415,7 @@ function MMI.fit(
         w = nothing
     end
 
-    # model specific reformated args is required for calling 
+    # model specific reformated args is required for calling
     # `fit`/`predict` on the `atom` model.
     atom = model.model
     atom_specific_args = MMI.reformat(atom, args...)
