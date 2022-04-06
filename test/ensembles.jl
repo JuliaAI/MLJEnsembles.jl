@@ -19,7 +19,7 @@ import Distributions
 pair_vcat(p, q) = (vcat(p[1], q[1]), vcat(p[2], q[2]))
 
 
-## WRAPPED ENSEMBLES OF FITRESU
+## WRAPPED ENSEMBLES OF FITRESULT
 
 # target is :deterministic :multiclass false:
 atom = DeterministicConstantClassifier()
@@ -186,11 +186,17 @@ predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))
 @test EnsembleModel(model=DeterministicConstantRegressor()) isa Deterministic
 
 @testset "further test of sample weights" begin
+    ## Note: This testset also indirectly tests for compatibility with the data-front end
+    # implemented by `KNNClassifier` as calls to `fit`/`predict` on an `Ensemble` model 
+    # with `atom=KNNClassifier` would error if the ensemble implementation doesn't handle
+    # data front-end conversions properly.
+    
     rng = StableRNG(123)
     N = 20
     X = (x = rand(rng, 3N), );
     y = categorical(rand(rng, "abbbc", 3N));
     atom = KNNClassifier()
+
     ensemble_model = EnsembleModel(model=atom,
                                    bagging_fraction=1,
                                    n = 5, rng=rng)
@@ -218,34 +224,39 @@ predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))
 end
 
 
-## MACHINE TEST (INCLUDES TEST OF UPDATE)
+## MACHINE TEST 
+## (INCLUDES TEST OF UPDATE.
+## ALSO INCLUDES COMPATIBILITY TESTS FOR ENSEMBLES WITH ATOM MODELS HAVING A 
+## DIFFERENT DATA FRONT-END SEE #16)
 
-N =100
-X = (x1=rand(N), x2=rand(N), x3=rand(N))
-y = 2X.x1  - X.x2 + 0.05*rand(N)
+@testset "machine tests" begin
+    N =100
+    X = (x1=rand(N), x2=rand(N), x3=rand(N))
+    y = 2X.x1  - X.x2 + 0.05*rand(N)
 
-atom = KNNRegressor(K=7)
-ensemble_model = EnsembleModel(model=atom)
-ensemble = machine(ensemble_model, X, y)
-train, test = partition(eachindex(y), 0.7)
-fit!(ensemble, rows=train, verbosity=0)
-@test length(ensemble.fitresult.ensemble) == ensemble_model.n
-ensemble_model.n = 15
-@test_logs((:info, r"Training"),
-          fit!(ensemble, verbosity=1))
-@test length(ensemble.fitresult.ensemble) == 15
-ensemble_model.n = 20
-@test_logs((:info, r"Updating"),
-           (:info, r"Building"),
-           fit!(ensemble))
-@test length(ensemble.fitresult.ensemble) == 20
-ensemble_model.n = 5
-@test_logs((:info, r"Updating"),
-           (:info, r"Truncating"),
-           fit!(ensemble))
-@test length(ensemble.fitresult.ensemble) == 5
+    atom = KNNRegressor(K=7)
+    ensemble_model = EnsembleModel(model=atom)
+    ensemble = machine(ensemble_model, X, y)
+    train, test = partition(eachindex(y), 0.7)
+    fit!(ensemble, rows=train, verbosity=0)
+    @test length(ensemble.fitresult.ensemble) == ensemble_model.n
+    ensemble_model.n = 15
+    @test_logs((:info, r"Training"),
+            fit!(ensemble, verbosity=1))
+    @test length(ensemble.fitresult.ensemble) == 15
+    ensemble_model.n = 20
+    @test_logs((:info, r"Updating"),
+            (:info, r"Building"),
+            fit!(ensemble))
+    @test length(ensemble.fitresult.ensemble) == 20
+    ensemble_model.n = 5
+    @test_logs((:info, r"Updating"),
+            (:info, r"Truncating"),
+            fit!(ensemble))
+    @test length(ensemble.fitresult.ensemble) == 5
 
-@test !isnan(predict(ensemble, MLJEnsembles.selectrows(X, test))[1])
+    @test !isnan(predict(ensemble, MLJEnsembles.selectrows(X, test))[1])
+end
 
 end
 
