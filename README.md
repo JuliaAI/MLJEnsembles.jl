@@ -18,7 +18,7 @@ No installation is necessary when using MLJ, which is installed like this:
 
 ```julia
 using Pkg
-Pkg.add("MLJ")\
+Pkg.add("MLJ")
 using MLJ
 ```
 
