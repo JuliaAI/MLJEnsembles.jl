@@ -34,8 +34,13 @@ function predict(wens::WrappedEnsemble{R,Atom}, atomic_weights, Xnew
     predict(wens, atomic_weights, Xnew, Probabilistic, target_scitype(Atom))
 end
 
-function predict(wens::WrappedEnsemble, atomic_weights, Xnew,
-                 ::Type{Deterministic}, ::Type{<:AbstractVector{<:Finite}})
+function predict(
+    wens::WrappedEnsemble,
+    atomic_weights,
+    Xnew,
+    ::Type{Deterministic},
+    ::Type{<:AbstractVector{<:Union{Missing,Finite}}},
+)
     # atomic_weights ignored in this case
     ensemble = wens.ensemble
     atom     = wens.atom
@@ -55,8 +60,13 @@ function predict(wens::WrappedEnsemble, atomic_weights, Xnew,
     return prediction
 end
 
-function predict(wens::WrappedEnsemble, atomic_weights, Xnew,
-                 ::Type{Deterministic}, ::Type{<:AbstractVector{<:Continuous}})
+function predict(
+    wens::WrappedEnsemble,
+    atomic_weights,
+    Xnew,
+    ::Type{Deterministic},
+    ::Type{<:AbstractVector{<:Union{Missing,Continuous}}},
+)
     # considering atomic weights
     ensemble = wens.ensemble
     atom     = wens.atom
@@ -73,8 +83,13 @@ function predict(wens::WrappedEnsemble, atomic_weights, Xnew,
     return prediction
 end
 
-function predict(wens::WrappedEnsemble, atomic_weights, Xnew,
-                 ::Type{Probabilistic}, ::Type{<:AbstractVector{<:Finite}})
+function predict(
+    wens::WrappedEnsemble,
+    atomic_weights,
+    Xnew,
+    ::Type{Probabilistic},
+    ::Type{<:AbstractVector{<:Union{Missing,Finite}}},
+)
     ensemble = wens.ensemble
     atom     = wens.atom
     n_atoms  = length(ensemble)
@@ -90,8 +105,13 @@ function predict(wens::WrappedEnsemble, atomic_weights, Xnew,
     return atomic_weights .* predictions |> sum
 end
 
-function predict(wens::WrappedEnsemble, atomic_weights, Xnew,
-                 ::Type{Probabilistic}, ::Type{<:AbstractVector{<:Continuous}})
+function predict(
+    wens::WrappedEnsemble,
+    atomic_weights,
+    Xnew,
+    ::Type{Probabilistic},
+    ::Type{<:AbstractVector{<:Union{Missing,Continuous}}},
+)
     ensemble = wens.ensemble
     atom     = wens.atom
     n_atoms  = length(ensemble)
