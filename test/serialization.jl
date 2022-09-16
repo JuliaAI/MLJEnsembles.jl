@@ -4,29 +4,26 @@ using Test
 using MLJEnsembles
 using MLJBase
 using ..Models
-using Serialization 
+using Serialization
 
 function test_args(mach)
     # Check source nodes are empty if any
     for arg in mach.args
-        if arg isa Source 
+        if arg isa Source
             @test arg == source()
         end
     end
 end
 
-function test_data(mach)
-    @test !isdefined(mach, :old_rows)
-    @test !isdefined(mach, :data)
-    @test !isdefined(mach, :resampled_data)
-    @test !isdefined(mach, :cache)
+test_data(mach) = @test all([:old_rows, :data, :resampled_data, :cache]) do field
+    !isdefined(mach, field) || isnothing(getfield(mach, field))
 end
 
 function generic_tests(mach₁, mach₂)
     test_args(mach₂)
     test_data(mach₂)
     @test mach₂.state == -1
-    for field in (:frozen, :model, :old_model, :old_upstream_state, :fit_okay)
+    for field in (:frozen, :model, :old_model, :old_upstream_state)
         @test getfield(mach₁, field) == getfield(mach₂, field)
     end
 end
