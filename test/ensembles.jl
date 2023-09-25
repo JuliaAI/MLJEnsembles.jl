@@ -8,7 +8,7 @@ using MLJBase
 using ..Models
 using CategoricalArrays
 import Distributions
-
+using StatisticalMeasures
 
 ## HELPER FUNCTIONS
 
