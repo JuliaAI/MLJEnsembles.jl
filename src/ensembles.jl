@@ -321,11 +321,10 @@ If a single measure or non-empty vector of measures is specified by
 written to the training report (call `report` on the trained
 machine wrapping the ensemble model).
 
-*Important:* If sample weights `w` (not to be confused with atomic
-weights) are specified when constructing a machine for the ensemble
-model, as in `mach = machine(ensemble_model, X, y, w)`, then `w` is
-used by any measures specified in `out_of_bag_measure` that support
-sample weights.
+*Important:* If per-observation or class weights `w` (not to be confused with atomic
+weights) are specified when constructing a machine for the ensemble model, as in `mach =
+machine(ensemble_model, X, y, w)`, then `w` is used by any measures specified in
+`out_of_bag_measure` that support them.
 
 """
 function EnsembleModel(
@@ -395,33 +394,55 @@ function _fit(res::CPUProcesses, func, verbosity, stuff)
         if i != nworkers()
             func(atom, 0, chunk_size, n_patterns, n_train, rng, progress_meter, args...)
         else
-            func(atom, 0, chunk_size + left_over, n_patterns, n_train, rng, progress_meter, args...)
+            func(
+                atom,
+                0,
+                chunk_size + left_over,
+                n_patterns,
+                n_train,
+                rng,
+                progress_meter,
+                args...,
+            )
         end
     end
 end
 
-@static if VERSION >= v"1.3.0-DEV.573"
-    function _fit(res::CPUThreads, func, verbosity, stuff)
-        atom, n, n_patterns, n_train, rng, progress_meter, args = stuff
-        if verbosity > 0
-            println("Ensemble-building in parallel on $(Threads.nthreads()) threads.")
-        end
-        nthreads = Threads.nthreads()
-        chunk_size = div(n, nthreads)
-        left_over = mod(n, nthreads)
-        resvec = Vector(undef, nthreads) # FIXME: Make this type-stable?
-
-        Threads.@threads for i = 1:nthreads
-            resvec[i] = if i != nworkers()
-                func(atom, 0, chunk_size, n_patterns, n_train, rng, progress_meter, args...)
-            else
-                func(atom, 0, chunk_size + left_over, n_patterns, n_train, rng, progress_meter, args...)
-            end
-        end
-
-        return reduce(_reducer, resvec)
+function _fit(res::CPUThreads, func, verbosity, stuff)
+    atom, n, n_patterns, n_train, rng, progress_meter, args = stuff
+    if verbosity > 0
+        println("Ensemble-building in parallel on $(Threads.nthreads()) threads.")
     end
+    nthreads = Threads.nthreads()
+    chunk_size = div(n, nthreads)
+    left_over = mod(n, nthreads)
+    resvec = Vector(undef, nthreads) # FIXME: Make this type-stable?
+
+    Threads.@threads for i = 1:nthreads
+        resvec[i] = if i != nworkers()
+            func(atom, 0, chunk_size, n_patterns, n_train, rng, progress_meter, args...)
+        else
+            func(
+                atom,
+                0,
+                chunk_size + left_over,
+                n_patterns,
+                n_train,
+                rng,
+                progress_meter,
+                args...,
+            )
+        end
+    end
+
+    return reduce(_reducer, resvec)
 end
+
+# for subsampling weights, which could be `nothing`, per-observation weights, or
+# class_weights:
+_view(class_weights::AbstractDict, rows) = class_weights
+_view(::Nothing, rows) = nothing
+_view(weights, rows) = view(weights, rows)
 
 function MMI.fit(
     model::EitherEnsembleModel{Atom}, verbosity::Int, args...
@@ -446,10 +467,14 @@ function MMI.fit(
         acceleration = CPU1()
     end
 
+    # we wrap the measures in `robust_measure` so they can be called with weights, even
+    # when they don't support them, and just ignore them silently.
     if model.out_of_bag_measure isa Vector
-        out_of_bag_measure = model.out_of_bag_measure
+        out_of_bag_measure =
+            StatisticalMeasuresBase.robust_measure.(model.out_of_bag_measure)
     else
-        out_of_bag_measure = [model.out_of_bag_measure,]
+        out_of_bag_measure =
+            [StatisticalMeasuresBase.robust_measure(model.out_of_bag_measure),]
     end
 
     if model.rng isa Integer
@@ -484,7 +509,7 @@ function MMI.fit(
 
     if !isempty(out_of_bag_measure)
 
-        metrics=zeros(length(ensemble),length(out_of_bag_measure))
+        measurements=zeros(length(ensemble),length(out_of_bag_measure))
         for i= 1:length(ensemble)
             #oob indices
             ooB_indices=  setdiff(1:n_patterns, ensemble_indices[i])
@@ -493,42 +518,44 @@ function MMI.fit(
                       "Data size too small or "*
                       "bagging_fraction too close to 1.0. ")
             end
-            yhat = predict(atom, ensemble[i], selectrows(atom, ooB_indices, atom_specific_X)...)
+            yhat = predict(
+                atom,
+                ensemble[i],
+                selectrows(atom, ooB_indices, atom_specific_X)...,
+            )
             Xtest = selectrows(X, ooB_indices)
             ytest = selectrows(y, ooB_indices)
 
-            if w === nothing
-                wtest = nothing
-            else
-                wtest = selectrows(w, ooB_indices)
-            end
+            # this could be class weights OR per-observation weights, OR `nothing`:
+            wtest = _view(w, ooB_indices)
 
             for k in eachindex(out_of_bag_measure)
                 m = out_of_bag_measure[k]
-                if MMI.reports_each_observation(m)
-                    s =  MLJBase.aggregate(
-                        MLJBase.value(m, yhat, Xtest, ytest, wtest),
-                        m
-                    )
-                else
-                    s = MLJBase.value(m, yhat, Xtest, ytest, wtest)
-                end
-                metrics[i,k] = s
+                s = m(yhat, ytest, wtest)
+                measurements[i,k] = s
             end
         end
 
-        # aggregate metrics across the ensembles:
-        aggregated_metrics = map(eachindex(out_of_bag_measure)) do k
-            MLJBase.aggregate(metrics[:,k], out_of_bag_measure[k])
+        # aggregate measurements across the ensembles:
+        aggregated_measurements = map(eachindex(out_of_bag_measure)) do k
+            StatisticalMeasuresBase.aggregate(
+                measurements[:,k],
+                mode=StatisticalMeasuresBase.external_aggregation_mode(
+                    out_of_bag_measure[k],
+                )
+            )
         end
 
         names = Symbol.(string.(out_of_bag_measure))
 
     else
-        aggregated_metrics = missing
+        aggregated_measurements = missing
     end
 
-    report=(measures=out_of_bag_measure, oob_measurements=aggregated_metrics,)
+    report=(
+        measures=out_of_bag_measure,
+        oob_measurements=aggregated_measurements,
+    )
     cache = deepcopy(model)
 
     return fitresult, cache, report
@@ -542,7 +569,7 @@ function MMI.update(model::EitherEnsembleModel,
 
     n = model.n
 
-    if MLJBase.is_same_except(model.model, old_model.model,
+    if MMI.is_same_except(model.model, old_model.model,
                               :n, :atomic_weights, :acceleration)
         if n > old_model.n
             verbosity < 1 ||
