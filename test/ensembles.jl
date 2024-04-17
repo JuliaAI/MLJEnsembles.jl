@@ -257,7 +257,7 @@ end
 
     @test !isnan(predict(ensemble, MLJEnsembles.selectrows(X, test))[1])
 
-    # tests using integer rngs (see issue 223)
+    # tests using integer rngs (see issue 27)
     X_, y_ = @load_iris
     atom = KNNClassifier(K = 7)
     ensemble_model = EnsembleModel(
