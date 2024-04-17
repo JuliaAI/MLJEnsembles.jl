@@ -256,7 +256,22 @@ end
     @test length(ensemble.fitresult.ensemble) == 5
 
     @test !isnan(predict(ensemble, MLJEnsembles.selectrows(X, test))[1])
+
+    # tests using integer rngs (see issue 223)
+    X_, y_ = @load_iris
+    atom = KNNClassifier(K = 7)
+    ensemble_model = EnsembleModel(
+        atom;
+        bagging_fraction=0.6,
+        rng=123,
+        out_of_bag_measure = [log_loss, brier_score]
+    )
+    ensemble = machine(ensemble_model, X_, y_)
+    fit!(ensemble)
+    @test length(ensemble.fitresult.ensemble) == ensemble_model.n
+
 end
+
 
 end
 
