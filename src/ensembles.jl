@@ -408,31 +408,56 @@ function _fit(res::CPUProcesses, func, verbosity, stuff)
     end
 end
 
+# Create thread safe version of RNGs.
+# Random._GLOBAL_RNG() and Random.default_rng() are threadsafe by default_rng
+# as they have thread local state from julia >=1.3<=1.6 and task local state Julia >=1.7   
+threadsafe_rng(rng::typeof(Random.default_rng())) = rng
+threadsafe_rng(rng::Random._GLOBAL_RNG) = rng
+threadsafe_rng(rng) = deepcopy(rng)
+
 function _fit(res::CPUThreads, func, verbosity, stuff)
     atom, n, n_patterns, n_train, rng, progress_meter, args = stuff
     if verbosity > 0
         println("Ensemble-building in parallel on $(Threads.nthreads()) threads.")
     end
+    
     nthreads = Threads.nthreads()
+    
+    if nthreads == 1
+        return  _fit(CPU1(), func, verbosity, stuff)
+    end
+
     chunk_size = div(n, nthreads)
     left_over = mod(n, nthreads)
     resvec = Vector(undef, nthreads) # FIXME: Make this type-stable?
 
-    Threads.@threads for i = 1:nthreads
-        resvec[i] = if i != nworkers()
-            func(atom, 0, chunk_size, n_patterns, n_train, rng, progress_meter, args...)
-        else
-            func(
-                atom,
-                0,
-                chunk_size + left_over,
-                n_patterns,
-                n_train,
-                rng,
-                progress_meter,
-                args...,
+    @sync begin
+        for i in 1:nthreads-1
+            Threads.@spawn(
+                resvec[i] = func(
+                    atom,
+                    0,
+                    chunk_size,
+                    n_patterns,
+                    n_train,
+                    threadsafe_rng(rng),
+                    progress_meter,
+                    args...
+                )
             )
         end
+        Threads.@spawn(
+            resvec[nthreads] = func(
+                    atom,
+                    0,
+                    chunk_size + left_over,
+                    n_patterns,
+                    n_train,
+                    threadsafe_rng(rng),
+                    progress_meter,
+                    args...
+            )
+        )
     end
 
     return reduce(_reducer, resvec)
