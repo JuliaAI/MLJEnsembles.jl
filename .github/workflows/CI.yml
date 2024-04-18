@@ -25,15 +25,7 @@ jobs:
           - windows-latest
         julia-arch:
           - x64
-        include:
-          - os: windows-latest
-            version: '1'
-            arch: x86
-          - os: ubuntu-latest
-            version: 'nightly'
-            arch: x64
-            allow_failure: true
-     steps:
+    steps:
       - uses: actions/checkout@v2
       - uses: julia-actions/setup-julia@v1
         with:
