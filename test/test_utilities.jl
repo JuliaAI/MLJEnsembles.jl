@@ -1,7 +1,6 @@
 using Test
 
 using ComputationalResources
-using ComputationalResources: CPUProcesses
 
 macro testset_accelerated(name::String, var, ex)
     testset_accelerated(name, var, ex)
