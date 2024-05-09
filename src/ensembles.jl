@@ -412,7 +412,9 @@ end
 # Random._GLOBAL_RNG() and Random.default_rng() are threadsafe by default_rng
 # as they have thread local state from julia >=1.3<=1.6 and task local state Julia >=1.7   
 threadsafe_rng(rng::typeof(Random.default_rng())) = rng
-threadsafe_rng(rng::Random._GLOBAL_RNG) = rng
+if isdefined(Random, :_GLOBAL_RNG)
+    threadsafe_rng(rng::Random._GLOBAL_RNG) = rng
+end
 threadsafe_rng(rng) = deepcopy(rng)
 
 function _fit(res::CPUThreads, func, verbosity, stuff)
