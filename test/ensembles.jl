@@ -1,15 +1,3 @@
-module TestEnsembles
-
-using Test
-using Random
-using StableRNGs
-using MLJEnsembles
-using MLJBase
-using ..Models
-using CategoricalArrays
-import Distributions
-using StatisticalMeasures
-
 ## HELPER FUNCTIONS
 
 @test MLJEnsembles._reducer([1, 2], [3, ]) == [1, 2, 3]
@@ -187,10 +175,10 @@ predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))
 
 @testset "further test of sample weights" begin
     ## Note: This testset also indirectly tests for compatibility with the data-front end
-    # implemented by `KNNClassifier` as calls to `fit`/`predict` on an `Ensemble` model 
+    # implemented by `KNNClassifier` as calls to `fit`/`predict` on an `Ensemble` model
     # with `atom=KNNClassifier` would error if the ensemble implementation doesn't handle
     # data front-end conversions properly.
-    
+
     rng = StableRNG(123)
     N = 20
     X = (x = rand(rng, 3N), );
@@ -224,18 +212,18 @@ predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))
 end
 
 
-## MACHINE TEST 
+## MACHINE TEST
 ## (INCLUDES TEST OF UPDATE.
-## ALSO INCLUDES COMPATIBILITY TESTS FOR ENSEMBLES WITH ATOM MODELS HAVING A 
+## ALSO INCLUDES COMPATIBILITY TESTS FOR ENSEMBLES WITH ATOM MODELS HAVING A
 ## DIFFERENT DATA FRONT-END SEE #16)
 
-@testset "machine tests" begin
+@testset_accelerated "machine tests" acceleration begin
     N =100
     X = (x1=rand(N), x2=rand(N), x3=rand(N))
     y = 2X.x1  - X.x2 + 0.05*rand(N)
 
     atom = KNNRegressor(K=7)
-    ensemble_model = EnsembleModel(model=atom)
+    ensemble_model = EnsembleModel(; model=atom, acceleration)
     ensemble = machine(ensemble_model, X, y)
     train, test = partition(eachindex(y), 0.7)
     fit!(ensemble, rows=train, verbosity=0)
@@ -264,14 +252,12 @@ end
         atom;
         bagging_fraction=0.6,
         rng=123,
-        out_of_bag_measure = [log_loss, brier_score]
+        out_of_bag_measure = [log_loss, brier_score],
+        acceleration,
     )
     ensemble = machine(ensemble_model, X_, y_)
     fit!(ensemble)
     @test length(ensemble.fitresult.ensemble) == ensemble_model.n
-
-end
-
 
 end
 
