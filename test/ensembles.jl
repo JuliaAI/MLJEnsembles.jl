@@ -63,6 +63,9 @@ X = MLJEnsembles.table(ones(5,3))
 y = categorical(collect("asdfa"))
 train, test = partition(1:length(y), 0.8);
 ensemble_model = EnsembleModel(model=atom)
+@test constructor(ensemble_model) == EnsembleModel
+@test load_path(ensemble_model) == "MLJEnsembles.EnsembleModel"
+@test package_name(ensemble_model) == "MLJEnsembles"
 ensemble_model.n = 10
 fitresult, cache, report = MLJEnsembles.fit(ensemble_model, 0, X, y)
 predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))

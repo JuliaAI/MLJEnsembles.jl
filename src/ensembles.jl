@@ -200,7 +200,6 @@ _reducer(p, q) = vcat(p, q)
 _reducer(p::Tuple, q::Tuple) = (vcat(p[1], q[1]), vcat(p[2], q[2]))
 
 
-
 # # ENSEMBLE MODEL TYPES
 
 mutable struct DeterministicEnsembleModel{Atom<:Deterministic} <: Deterministic
@@ -638,11 +637,8 @@ end
 
 # Note: input and target traits are inherited from atom
 
-MMI.load_path(::Type{<:ProbabilisticEnsembleModel}) =
-    "MLJ.ProbabilisticEnsembleModel"
-MMI.load_path(::Type{<:DeterministicEnsembleModel}) =
-    "MLJ.DeterministicEnsembleModel"
-
+MMI.load_path(::Type{<:EitherEnsembleModel}) = "MLJEnsembles.EnsembleModel"
+MMI.constructor(::Type{<:EitherEnsembleModel}) = EnsembleModel
 MMI.is_wrapper(::Type{<:EitherEnsembleModel}) = true
 MMI.supports_weights(::Type{<:EitherEnsembleModel{Atom}}) where Atom =
     MMI.supports_weights(Atom)
