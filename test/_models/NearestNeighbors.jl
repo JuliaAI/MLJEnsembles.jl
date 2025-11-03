@@ -93,7 +93,7 @@ function MLJBase.predict(m::KNNClassifier, (tree, y, w), X)
     idxs, dists = NN.knn(tree, Xmatrix, m.K)
 
     preds       = Vector{MLJBase.UnivariateFinite}(undef, length(idxs))
-    classes     = MLJBase.classes(y[1])
+    classes     = MLJBase.levels(y[1])
     probas      = zeros(length(classes))
 
     w_ = ones(m.K)

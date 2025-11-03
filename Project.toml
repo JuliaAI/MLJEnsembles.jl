@@ -1,7 +1,7 @@
 name = "MLJEnsembles"
 uuid = "50ed68f4-41fd-4504-931a-ed422449fee0"
 authors = ["Anthony D. Blaom <anthony.blaom@gmail.com>"]
-version = "0.4.3"
+version = "0.4.4"
 
 [deps]
 CategoricalArrays = "324d7699-5711-5eae-9e2f-1d82baa6b597"
@@ -17,8 +17,8 @@ StatisticalMeasuresBase = "c062fc1d-0d66-479b-b6ac-8b44719de4cc"
 StatsBase = "2913bbd2-ae8a-5f71-8c99-4fb6c76f3a91"
 
 [compat]
-CategoricalArrays = "0.8, 0.9, 0.10"
-CategoricalDistributions = "0.1.2"
+CategoricalArrays = "1"
+CategoricalDistributions = "0.2"
 ComputationalResources = "0.3"
 Distributions = "0.21, 0.22, 0.23, 0.24, 0.25"
 MLJModelInterface = "1.10"
@@ -26,7 +26,7 @@ ProgressMeter = "1.1"
 ScientificTypesBase = "2,3"
 StatisticalMeasuresBase = "0.1"
 StatsBase = "0.32, 0.33, 0.34"
-julia = "1.6"
+julia = "1.10"
 
 [extras]
 Distances = "b4f34e82-e78d-54a5-968a-f98e89d6e8f7"
