@@ -17,7 +17,7 @@ jobs:
       fail-fast: false
       matrix:
         julia-version:
-          - "1.6"
+          - "1.10"
           - "1"
         os:
           - ubuntu-latest
@@ -32,7 +32,7 @@ jobs:
           version: ${{ matrix.julia-version }}
           arch: ${{ matrix.julia-arch }}
       - name: Cache artifacts
-        uses: actions/cache@v2
+        uses: julia-actions/cache@v2
         env:
           cache-name: cache-artifacts
         with:
