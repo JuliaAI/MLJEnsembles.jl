@@ -653,3 +653,4 @@ MMI.input_scitype(::Type{<:EitherEnsembleModel{Atom}}) where Atom =
     MMI.input_scitype(Atom)
 MMI.target_scitype(::Type{<:EitherEnsembleModel{Atom}}) where Atom =
     MMI.target_scitype(Atom)
+MMI.iteration_parameter(::Type{<:EitherEnsembleModel}) = :n

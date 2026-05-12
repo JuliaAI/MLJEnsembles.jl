@@ -66,6 +66,7 @@ ensemble_model = EnsembleModel(model=atom)
 @test constructor(ensemble_model) == EnsembleModel
 @test load_path(ensemble_model) == "MLJEnsembles.EnsembleModel"
 @test package_name(ensemble_model) == "MLJEnsembles"
+@test iteration_parameter(ensemble_model) == :n
 ensemble_model.n = 10
 fitresult, cache, report = MLJEnsembles.fit(ensemble_model, 0, X, y)
 predict(ensemble_model, fitresult, MLJEnsembles.selectrows(X, test))
